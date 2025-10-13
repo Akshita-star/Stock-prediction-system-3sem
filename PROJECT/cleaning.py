@@ -133,18 +133,7 @@ if final_symbol:
         plt.grid(True)
         st.pyplot(plt)
 
-        #(5)-------daily high low----
-        st.subheader(f"{final_symbol} High-Low Spread ({period_label})")
-        plt.figure(figsize=(12, 5))
-        plt.plot(recent_data['Date'], recent_data['Close'], label='Close Price', color='blue')
-        plt.title(f"{final_symbol} High-Low Spread")
-        plt.xlabel("Date")
-        plt.ylabel("Price")
-        plt.legend()
-        plt.grid(True)
-        st.pyplot(plt)
-
-        #(6)------daily returns-------
+        #(5)------daily returns-------
         recent_data['Daily Return %'] = recent_data['Close'].pct_change() * 100
         st.subheader(f"{final_symbol} Daily Returns (%) ({period_label})")
         plt.figure(figsize=(12,5))
@@ -155,7 +144,7 @@ if final_symbol:
         plt.grid(True)
         st.pyplot(plt)
 
-        #(7)-----COMPARING-----
+        #(6)-----COMPARING-----
         st.write("\n"*3)
         compare_option = st.checkbox("Compare with another stock?")
 
