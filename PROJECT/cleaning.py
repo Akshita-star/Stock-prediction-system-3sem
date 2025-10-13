@@ -1,15 +1,18 @@
 import pandas as pd
 import yfinance as yf
-from datetime import date
+from datetime import date, timedelta
 import streamlit as st
 import matplotlib.pyplot as plt
 
+# --- CONFIG ---
 start = "2012-01-01"
 end = date.today()
 
+st.set_page_config(page_title="StockOracle", layout="wide")
 st.title("📊 StockOracle")
 st.write("\n" * 2)
 
+# --- STOCK OPTIONS ---
 stock_list = [
     "RELIANCE.NS", "TCS.NS", "INFY.NS", "HDFCBANK.NS", "ICICIBANK.NS",
     "SBIN.NS", "ITC.NS", "BHARTIARTL.NS", "WIPRO.NS", "HINDUNILVR.NS", "AAPL"
@@ -17,120 +20,87 @@ stock_list = [
 
 @st.cache_data
 def load_data(ticker):
-    data = yf.download(ticker, start, end)
-    data.reset_index(inplace=True)
-    return data
+    """Fetch and cache stock data"""
+    try:
+        data = yf.download(ticker, start, end)
+        data.reset_index(inplace=True)
+        return data
+    except Exception:
+        return pd.DataFrame()
 
-# --- Stock selection ---
+# --- STOCK INPUT ---
 stock_symbol = st.selectbox(
     "Select Stock Symbol:",
-    options=stock_list,
-    index=None
+    options=[" "] + stock_list,
+    index=0,
+    format_func=lambda x: x if x else " "
 )
-
-st.write("\n" * 2)
-st.write("🧐 Unable to find your stock? Type manually below 👇")
+st.write("💡 Or type manually below:")
 manual_symbol = st.text_input("Enter Stock Symbol:", placeholder="e.g., RELIANCE.NS, AAPL, etc.")
-final_symbol = manual_symbol.strip() if manual_symbol.strip() else stock_symbol
-search = st.button("Search")
+final_symbol = manual_symbol.strip() if manual_symbol.strip() else stock_symbol.strip()
 
-if search and final_symbol:
+# --- MAIN LOGIC ---
+if final_symbol:
     data = load_data(final_symbol)
 
     if not data.empty:
-
-        # (1) --- STOCK STATISTICS ---
-        st.subheader(f"📈 {final_symbol} - Stock Statistics")
-        col1, col2, col3 = st.columns(3)
-
-        latest_row = data.iloc[-1]
-        prev_row = data.iloc[-2] if len(data) > 1 else latest_row
-
-        open_price = float(latest_row["Open"])
-        close_price = float(latest_row["Close"])
-        prev_close = float(prev_row["Close"])
-
-        change = close_price - prev_close
-        percent_change = (change / prev_close * 100) if prev_close != 0 else 0
-
-        open_display = f"₹{open_price:,.2f}"
-        close_display = f"₹{close_price:,.2f}"
-        change_display = f"{'+' if change >= 0 else ''}₹{change:,.2f}"
-        percent_display = f"{percent_change:+.2f}%"
-
-        with col1:
-            st.metric("Open", open_display, f"{(open_price - prev_close) / prev_close * 100:+.2f}%")
-        with col2:
-            st.metric("Close", close_display, percent_display)
-        with col3:
-            st.metric("Change", change_display, percent_display)
-
-        # # (2) --- TIME PERIOD CHART ---
-        period_options = {"1 Month": 30,
-        "6 Months": 182,
-        "1 Year": 365,
-        "5 Years": 1825,
-        "10 Years": 3650
+        # --- TIME PERIOD SELECTION ---
+        st.subheader("Select Time Period")
+        period_options = {
+            "1 Month": 30,
+            "6 Months": 182,
+            "1 Year": 365,
+            "5 Years": 1825,
         }
-
-        period_label = st.radio(
-        "Select Period for Chart:",
-        list(period_options.keys()),
-        horizontal=True
-        )
-    
-
+        period_label = st.radio("Period:", list(period_options.keys()), horizontal=True)
         days = period_options[period_label]
 
-        # Ensure 'Date' is datetime
-        data["Date"] = pd.to_datetime(data["Date"])
-        last_date = data["Date"].max()
-        start_period = last_date - pd.Timedelta(days=days)
+        # Filter data by date
+        start_date = data['Date'].max() - timedelta(days=days)
+        recent_data = data[data['Date'] >= start_date]
 
-        # Filter data for selected period
-        filtered_data = data[data["Date"] >= start_period].copy()
+        # (1) MAIN CHART
+        st.subheader(f" {final_symbol} Price Chart ({period_label})")
+        plt.figure(figsize=(12, 5))
+        plt.plot(recent_data['Date'], recent_data['Close'], label='Close Price', color='blue')
+        plt.plot(recent_data['Date'], recent_data['Open'], label='Open Price', color='orange', alpha=0.7)
+        plt.title(f"{final_symbol} Stock Price Over {period_label}")
+        plt.xlabel("Date")
+        plt.ylabel("Price")
+        plt.legend()
+        plt.grid(True)
+        st.pyplot(plt)
 
-        # Calculate moving averages
-        filtered_data["MA50"] = filtered_data["Close"].rolling(window=50).mean()
-        filtered_data["MA200"] = filtered_data["Close"].rolling(window=200).mean()
+        #2
+        st.subheader(f"{final_symbol} Volume Chart ({period_label})")
+        plt.figure(figsize=(12, 5))
+        plt.plot(recent_data['Date'], recent_data['Volume'], label='Volume', color='lightgreen')
+        plt.title(f"{final_symbol} Trading Volume Over {period_label}")
+        plt.xlabel("Date")
+        plt.ylabel("Volume")
+        plt.legend()
+        plt.grid(True)
+        st.pyplot(plt)
 
-        # Drop rows where Volume is NaN to prevent errors
-        filtered_data = filtered_data.dropna(subset=["Volume", "Close"])
+        #3
+        # Calculate Moving Averages
+        recent_data['MA10'] = recent_data['Close'].rolling(10).mean()
+        recent_data['MA50'] = recent_data['Close'].rolling(50).mean()
 
-        # Convert Series to list for plotting
-        dates = filtered_data["Date"]
-        close_prices = filtered_data["Close"]
-        ma50 = filtered_data["MA50"]
-        ma200 = filtered_data["MA200"]
-        volumes = filtered_data["Volume"].astype(float)
+        st.subheader(f" {final_symbol} Moving Averages ({period_label})")
+        plt.figure(figsize=(12, 5))
+        plt.plot(recent_data['Date'], recent_data['Close'], label='Close Price', color='blue')
+        plt.plot(recent_data['Date'], recent_data['MA10'], label='MA10 (10-day)', color='orange')
+        plt.plot(recent_data['Date'], recent_data['MA50'], label='MA50 (50-day)', color='green')
+        plt.title(f"{final_symbol} Close Price with Moving Averages")
+        plt.xlabel("Date")
+        plt.ylabel("Price")
+        plt.legend()
+        plt.grid(True)
+        st.pyplot(plt)
 
-        # Plotting
-        fig, ax1 = plt.subplots(figsize=(10, 5))
-
-        # Price & Moving Averages   
-        ax1.plot(dates, close_prices, label="Close Price", color="blue")
-        ax1.plot(dates, ma50, label="50-day MA", color="orange", linestyle="--")
-        ax1.plot(dates, ma200, label="200-day MA", color="green", linestyle="--")
-        ax1.set_ylabel("Price (₹)")
-        ax1.set_xlabel("Date")
-        ax1.legend(loc="upper left")
-        ax1.set_title(f"{final_symbol} Price Chart ({period_label})")
-
-        # Volume bars
-        ax2 = ax1.twinx()
-        ax2.bar(dates, volumes, color="gray", alpha=0.2, label="Volume")
-        ax2.set_ylabel("Volume")
-        ax2.set_ylim(bottom=0)
-
-        # Improve x-axis formatting
-        fig.autofmt_xdate()
-
-        # Show plot in Streamlit
-        st.pyplot(fig)
-
-        # (4) --- RAW DATA ---
-        st.subheader("📜 Raw Data")
-        st.write(filtered_data.tail(20))
-
+        # --- RAW DATA ---
+        st.subheader(" Raw Data")
+        st.dataframe(data)
     else:
-        st.warning(f"No data found for {final_symbol}. Please check ticker spelling or exchange suffix.")
+        st.warning(f"⚠️ No valid data found for '{final_symbol}'. Please check ticker spelling or exchange suffix.")

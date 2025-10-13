@@ -19,6 +19,7 @@ stock_symbol = st.selectbox(
 )
 search = st.button("Search")
 
+
 if stock_symbol and search:
     st.success(f"You selected: **{stock_symbol}**")
 
